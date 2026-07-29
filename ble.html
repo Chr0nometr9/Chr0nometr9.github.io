@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AAK Controller Config</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 400px; margin: 0 auto; background-color: #f4f4f9; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        label { display: block; margin-top: 15px; font-weight: bold; }
+        input { width: 100%; padding: 8px; margin-top: 5px; box-sizing: border-box; }
+        button { width: 100%; margin-top: 20px; padding: 12px; background: #007bff; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+        button:disabled { background: #ccc; }
+        #status { margin-top: 15px; font-size: 14px; color: #555; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>Настройки AAK</h2>
+    <button id="connectBtn" onclick="connect()">Подключиться к ESP32</button>
+    
+    <label for="threshold">RSSI Threshold (dBm):</label>
+    <input type="number" id="threshold" value="-60" disabled>
+
+    <label for="hysteresis">RSSI Hysteresis (dBm):</label>
+    <input type="number" id="hysteresis" value="5" disabled>
+
+    <label for="alpha">EMA Alpha (0.01 - 1.0):</label>
+    <input type="number" step="0.01" id="alpha" value="0.35" disabled>
+
+    <button id="saveBtn" onclick="saveSettings()" disabled>Сохранить настройки</button>
+    <div id="status">Статус: Отключено</div>
+</div>
+
+<script>
+    const SERVICE_UUID = "12345678-1234-1234-1234-123456789abc";
+    const CHAR_UUID    = "87654321-4321-4321-4321-cba987654321";
+
+    let settingsChar = null;
+
+    async function connect() {
+        try {
+            document.getElementById("status").innerText = "Поиск устройства...";
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [{ name: "AAK" }],
+                optionalServices: [SERVICE_UUID]
+            });
+
+            document.getElementById("status").innerText = "Подключение...";
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService(SERVICE_UUID);
+            settingsChar = await service.getCharacteristic(CHAR_UUID);
+
+            // Чтение текущих настроек
+            const value = await settingsChar.readValue();
+            const decoder = new TextDecoder("utf-8");
+            const dataStr = decoder.decode(value);
+            const [th, hy, alpha] = dataStr.split(",");
+
+            document.getElementById("threshold").value = th;
+            document.getElementById("hysteresis").value = hy;
+            document.getElementById("alpha").value = alpha;
+
+            // Включаем поля
+            document.getElementById("threshold").disabled = false;
+            document.getElementById("hysteresis").disabled = false;
+            document.getElementById("alpha").disabled = false;
+            document.getElementById("saveBtn").disabled = false;
+
+            document.getElementById("status").innerText = "Подключено успешно!";
+        } catch (error) {
+            console.error(error);
+            document.getElementById("status").innerText = "Ошибка: " + error.message;
+        }
+    }
+
+    async function saveSettings() {
+        if (!settingsChar) return;
+
+        const th = document.getElementById("threshold").value;
+        const hy = document.getElementById("hysteresis").value;
+        const alpha = document.getElementById("alpha").value;
+
+        const payload = `${th},${hy},${alpha}`;
+        const encoder = new TextEncoder();
+
+        try {
+            await settingsChar.writeValue(encoder.encode(payload));
+            document.getElementById("status").innerText = "Настройки сохранены на ESP32!";
+        } catch (error) {
+            console.error(error);
+            document.getElementById("status").innerText = "Ошибка сохранения: " + error.message;
+        }
+    }
+</script>
+
+</body>
+</html>
